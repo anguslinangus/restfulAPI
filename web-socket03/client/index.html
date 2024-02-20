@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
+      crossorigin="anonymous"
+    />
+    <style>
+      html, body{
+        height: 100%;
+      }
+      .main .down{
+        height: 92px;
+      }
+      .main .up{
+        height: calc(100% - 92px);
+      }
+      .main .right{
+        width: 200px;
+      }
+      .main .left{
+        width: calc(100% - 200px);
+        overflow-y: scroll;
+      }
+    </style>
+    <title>多人連線 - 使用者名單</title>
+  </head>
+  <body>
+    <div class="container-lg h-100 bg-primary-subtle p-2 main d-flex flex-column">
+      <div class="up d-flex">
+        <div class="left bg-warning-subtle me-1 p-2">
+          <h3>聊天室</h3>
+          <div class="list"></div>
+        </div>
+        <div class="right bg-secondary-subtle h-100 rounded-1 p-2">
+          <h3>小房間列表</h3>
+          <div class="list"></div>
+        </div>
+      </div>
+      <div class="down my-1">
+        <div class="input-group input-group-lg mb-1">
+          <input type="text" class="form-control" name="msg" placeholder="輸入聊天訊息">
+          <div class="btn btn-primary input-group-text btn-send">送出訊息</div>
+        </div>
+        <div class="input-group input-group-lg">
+          <input type="text" class="form-control" name="roomName" placeholder="輸入小房間名稱">
+          <div class="btn btn-primary input-group-text btn-croom">建立房間</div>
+        </div>
+      </div>
+    </div>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
+      crossorigin="anonymous"
+    ></script>
+    <script>
+      const divRight = document.querySelector(".right .list");
+      const titleRight = document.querySelector(".right h3");
+      const divLeft = document.querySelector(".left .list");
+      const titleLeft = document.querySelector(".left h3");
+      const btnSend = document.querySelector(".btn-send");
+      const btnRoom = document.querySelector(".btn-croom");
+      const msgInput = document.querySelector("[name=msg]");
+      const roomNameInput = document.querySelector("[name=roomName]");
+      const ws = new WebSocket("ws://localhost:8080");
+      const userID = new Date().getTime().toString();
+      let clientList, targetUserID, roomList, roomID, roomName;
+
+      ws.addEventListener("open", () => {
+        divLeft.innerHTML += `<div>已經進入瘋之谷聊天室，你的ID是${userID}</div>`;
+        let params = {
+          type: "register",
+          userID,
+        };
+        ws.send(JSON.stringify(params));
+      });
+
+      ws.addEventListener("message", async (e) => {
+        let data = await e.data;
+        let result = JSON.parse(data);
+        if (result.type === "registered") {
+          clientList = result.otherClients;
+          roomList = result.allRooms;
+          // setClients();
+          setRooms();
+        }
+
+        if (result.type === "disconnected") {
+          clientList = result.otherClients;
+          setClients();
+        }
+
+        if (result.type === "message") {
+            let fromID = result.fromID;
+            if(fromID === userID){
+                fromID = "我自己"
+            }
+            let action = `<span class="badge text-bg-primary">說</span>`;
+            if(result.private){
+                action = `<span class="badge text-bg-danger">俏俏說</span>`;
+            }
+            let msg = result.message;
+            divLeft.innerHTML += `<div>${fromID} ${action} : ${msg}</div>`;
+        }
+        
+        if(result.type === "newRoom"){
+          roomList = result.allRooms;
+          setRooms();
+        }
+
+        if(result.type === "joinRoom"){
+
+        }
+
+        if(result.type === "leaveRoom"){
+
+        }
+      });
+
+      divRight.addEventListener("click", e => {
+        let target = e.target;
+        if(target.classList.contains("user")){
+            let idn = target.getAttribute("idn");
+            if(userID !== idn){
+                if(targetUserID && targetUserID != idn){
+                    return false;
+                }
+                if(!target.classList.contains("btn-danger")){
+                    target.classList.add("btn-danger");
+                    targetUserID = idn;
+                }else{
+                    target.classList.remove("btn-danger");
+                    targetUserID = undefined;
+                }
+            }
+        }else if(target.classList.contains("room")){
+          roomID = target.getAttribute("idn");
+          roomName = target.getAttribute("roomName");
+          let params = {
+            type: "joinRoom",
+            roomID,
+            userID
+          }
+          ws.send(JSON.stringify(params));
+          titleRight.innerHTML = "使用者列表";
+          titleLeft.innerHTML = `位於聊天室 ${roomName} 中`;
+          divLeft.innerHTML = "";
+          divRight.innerHTML = "等待別人加入...";
+          btnRoom.innerHTML = "離開房間";
+          btnRoom.classList.add("btn-danger");
+        }
+      });
+
+      btnSend.addEventListener("click", () => {
+        sendMessage();
+      });
+
+      btnRoom.addEventListener("click", () => {
+        createRoom();
+      });
+
+      msgInput.addEventListener("keyup", e => {
+        if(e.key === "Enter"){
+            sendMessage();
+        }
+      })
+
+      function createRoom(){
+        roomID = "r"+new Date().getTime().toString();
+        roomName = roomNameInput.value;
+        let params = {
+          type: "createRoom",
+          userID,
+          roomID,
+          roomName
+        }
+        ws.send(JSON.stringify(params));
+        titleRight.innerHTML = "使用者列表";
+        titleLeft.innerHTML = `位於聊天室 ${roomName} 中`;
+        divLeft.innerHTML = "";
+        divRight.innerHTML = "等待別人加入...";
+        btnRoom.innerHTML = "離開房間";
+        btnRoom.classList.add("btn-danger");
+      }
+
+      function joinRoom(){}
+
+      function leaveRoom(){}
+
+      function sendMessage(){
+        let msg = msgInput.value;
+        let parms = {
+            type: "message",
+            message: msg,
+            userID
+        }
+        if(targetUserID){
+            parms.targetUserID = targetUserID;
+        }
+        ws.send(JSON.stringify(parms));
+        msgInput.value = "";
+        // 俏俏說的自己的演出
+        console.log(targetUserID);
+        if(targetUserID){
+            let fromID = "我自己";
+            let action = `俏俏對 <span class="badge text-bg-danger">${targetUserID}</span> 說`;
+            divLeft.innerHTML += `<div>${fromID} ${action} : ${msg}</div>`;
+        }
+      }
+
+      function setRooms(){
+        if(roomID){
+          return false;
+        }
+        let nodes = "";
+        roomList.forEach(room => {
+          let clientRoomID = room.id;
+          let clientRoomName = room.name;
+          let node = `<div roomName="${clientRoomName}" idn="${clientRoomID}" class="btn room btn-primary w-100 mb-1 btn-sm ">${clientRoomName}</div>`;
+          nodes += node;
+        });
+        divRight.innerHTML = nodes;
+      }
+
+      function setClients() {
+        let nodes = "";
+        clientList.forEach((client) => {
+          let myself = client === userID ? "btn-primary" : "btn-secondary";
+          let node = `<div idn="${client}" class="btn user ${myself} w-100 mb-1 btn-sm ">${client}</div>`;
+          nodes += node;
+        });
+        divRight.innerHTML = nodes;
+      }
+    </script>
+  </body>
+</html>
+

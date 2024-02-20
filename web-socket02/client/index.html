@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多人連線 - 使用者名單</title>
+    <style>
+        * {
+            font-family: sans-serif;
+        }
+        /* 偽元素 */
+        .myself::after{
+            content: "<= 我自己";
+            color: #ec3a7e;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="list">
+
+    </div>
+    <!-- <div>
+        123125454543
+    </div>
+    <div class="myself">
+        787908973947
+    </div> -->
+    
+    <script>
+        const divList = document.querySelector(".list");
+        const ws = new WebSocket("ws://localhost:8080");
+        const userID = new Date().getTime().toString();
+        let clientList;
+
+        ws.addEventListener("open", () => {
+            let params = {                
+                type: "register",
+                userID
+            }
+            ws.send(JSON.stringify(params));
+        });
+
+        ws.addEventListener("message", async e => {
+            let data = await e.data;
+            let result = JSON.parse(data);
+            console.log(result);
+            if(result.type === "registered"){
+                clientList = result.otherClients;
+                setClient();
+            }
+            if(result.type === "disconnected"){
+                clientList = result.otherClients;
+                setClient();
+            }
+        });
+
+        function setClient(){
+            let nodes = "";
+            clientList.forEach(client => {
+                let myself = (client === userID) ? "myself" : "";
+                let node = `<div class="${myself}">${client}</div>`;
+                nodes += node;
+            });
+            divList.innerHTML = nodes;
+        }
+    </script>
+</body>
+</html>
